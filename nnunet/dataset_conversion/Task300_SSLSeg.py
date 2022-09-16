@@ -25,11 +25,11 @@ if __name__ == '__main__':
 
     # download dataset from https://www.kaggle.com/insaff/massachusetts-roads-dataset
     # extract the zip file, then set the following path according to your system:
-    base = '/media/oem/sda21/wxg/NeurIPS-CellSeg-main/data'
+    base = '/media/oem/sda21/wxg/NeurIPS-CellSeg-main/data/labeled'
     # this folder should have the training and testing subfolders
 
     # now start the conversion to nnU-Net:
-    task_name = 'Task520_CellSeg'
+    task_name = 'Task300_SSLSeg'
     target_base = join(nnUNet_raw_data, task_name)
     target_imagesTr = join(target_base, "imagesTr")
     target_imagesTs = join(target_base, "imagesTs")
@@ -43,8 +43,8 @@ if __name__ == '__main__':
 
     # convert the training examples. Not all training images have labels, so we just take the cases for which there are
     # labels
-    labels_dir_tr = join(base, 'Train_Pre_3class', 'labels')
-    images_dir_tr = join(base, 'Train_Pre_3class', 'images')
+    labels_dir_tr = join(base, 'output')
+    images_dir_tr = join(base, 'input')
     training_cases = subfiles(labels_dir_tr, suffix='.png', join=False)
     for t in training_cases:
         print(t)
@@ -57,7 +57,7 @@ if __name__ == '__main__':
 
         # this utility will convert 2d images that can be read by skimage.io.imread to nifti. You don't need to do anything.
         # if this throws an error for your images, please just look at the code for this function and adapt it to your needs
-        # convert_2d_image_to_nifti(input_image_file, output_image_file, is_seg=False)
+        convert_2d_image_to_nifti(input_image_file, output_image_file, is_seg=False)
 
         # the labels are stored as 0: background, 255: road. We need to convert the 2 to 1 because nnU-Net expects
         # the labels to be consecutive integers. This can be achieved with setting a transform
