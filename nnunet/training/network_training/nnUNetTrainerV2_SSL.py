@@ -329,7 +329,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                     consistency_loss = torch.mean(
                         (output_unlabel[0] - ema_output[0])**2
                     )
-                loss = supervised_loss - consistency_weight*consistency_loss
+                loss = supervised_loss + consistency_weight*consistency_loss
 
             if do_backprop:
                 self.amp_grad_scaler.scale(loss).backward()
@@ -354,7 +354,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                 consistency_loss = torch.mean(
                     (output_unlabel - ema_output)**2
                 )
-            loss = supervised_loss - consistency_weight*consistency_loss
+            loss = supervised_loss + consistency_weight*consistency_loss
 
             if do_backprop:
                 loss.backward()
