@@ -43,7 +43,6 @@ if __name__ == '__main__':
 
     # convert the training examples. Not all training images have labels, so we just take the cases for which there are
     # labels
-    #####
     labels_dir_tr = join(base, 'output')
     images_dir_tr = join(base, 'input')
     training_cases = subfiles(labels_dir_tr, suffix='.png', join=False)
