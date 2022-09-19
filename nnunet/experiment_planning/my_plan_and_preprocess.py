@@ -31,6 +31,12 @@ import nibabel as nib
 import numpy as np
 
 def main():
+    '''
+    define my preprocess for unlabeled data
+    :TODO verify crop code to adapt new data
+    :TODO then revise train_SSL class code to solve problems
+
+    '''
     import argparse
 
     parser = argparse.ArgumentParser()
@@ -129,7 +135,8 @@ def main():
         lists, _ = create_lists_from_splitted_dataset(splitted_4d_output_dir_task)
 
         imgcrop = ImageCropper(num_threads, cropped_out_dir)
-        # imgcrop.run_cropping(lists, overwrite_existing=override)
+        #######ImageCropper是主要的实现crop类，对无标签数据crop需要改写一下#######
+        imgcrop.run_cropping(lists, overwrite_existing=override)
         shutil.copy(join(nnUNet_raw_data, task_string, "dataset.json"), cropped_out_dir)
     def verify_all_same_orientation(folder):
         """
@@ -228,34 +235,7 @@ def main():
 
         # verify that only properly declared values are present in the labels
         print("Verifying label values---SKIP")
-        # expected_labels = list(int(i) for i in dataset['labels'].keys())
-        # expected_labels.sort()
-
-        # # check if labels are in consecutive order
-        # assert expected_labels[0] == 0, 'The first label must be 0 and maps to the background'
-        # labels_valid_consecutive = np.ediff1d(expected_labels) == 1
-        # assert all(labels_valid_consecutive), f'Labels must be in consecutive order (0, 1, 2, ...). The labels {np.array(expected_labels)[1:][~labels_valid_consecutive]} do not satisfy this restriction'
-
-        # p = Pool(default_num_threads)
-        # results = p.starmap(verify_contains_only_expected_labels, zip(label_files, [expected_labels] * len(label_files)))
-        # p.close()
-        # p.join()
-
-        # fail = False
-        # print("Expected label values are", expected_labels)
-        # for i, r in enumerate(results):
-        #     if not r[0]:
-        #         print("Unexpected labels found in file %s. Found these unexpected values (they should not be there) %s" % (
-        #             label_files[i], r[1]))
-        #         fail = True
-
-        # if fail:
-        #     raise AssertionError(
-        #         "Found unexpected labels in the training dataset. Please correct that or adjust your dataset.json accordingly")
-        # else:
-        #     print("Labels OK")
-
-        # check test set, but only if there actually is a test set
+######对于无标签数据跳过数据检查这一步#######
         if len(expected_test_identifiers) > 0:
             print("Verifying test set")
             nii_files_in_imagesTs = subfiles((join(folder, "imagesTs")), suffix=".nii.gz", join=False)
@@ -291,7 +271,7 @@ def main():
         if not geometries_OK:
             raise Warning("GEOMETRY MISMATCH FOUND! CHECK THE TEXT OUTPUT! This does not cause an error at this point  but you should definitely check whether your geometries are alright!")
         else:
-            print("Dataset OK")
+            print("TRAIN no label Dataset OK")
 
         if has_nan:
             raise RuntimeError("Some images have nan values in them. This will break the training. See text output above to see which ones")
@@ -302,7 +282,7 @@ def main():
         i = int(i)
 
         task_name = convert_id_to_task_name(i)
-
+#########跳过这一步完整性检查，下一步就是crop数据，path:raw_data->raw_data/cropped_data#######
         if args.verify_dataset_integrity:
             verify_dataset_integrity(join(nnUNet_raw_data, task_name))
 
