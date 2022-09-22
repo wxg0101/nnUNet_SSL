@@ -23,6 +23,7 @@ from nnunet.utilities.task_name_id_conversion import convert_id_to_task_name
 from nnunet.preprocessing.sanity_checks import verify_dataset_integrity
 from nnunet.training.model_restore import recursive_find_python_class
 from nnunet.preprocessing.cropping import ImageCropper
+from nnunet.preprocessing.my_cropping import ImageCropper_2
 from nnunet.configuration import default_num_threads
 from multiprocessing import Pool
 
@@ -134,7 +135,7 @@ def main():
         splitted_4d_output_dir_task = join(nnUNet_raw_data, task_string)
         lists, _ = create_lists_from_splitted_dataset(splitted_4d_output_dir_task)
 
-        imgcrop = ImageCropper(num_threads, cropped_out_dir)
+        imgcrop = ImageCropper_2(num_threads, cropped_out_dir)
         #######ImageCropper是主要的实现crop类，对无标签数据crop需要改写一下#######
         imgcrop.run_cropping(lists, overwrite_existing=override)
         shutil.copy(join(nnUNet_raw_data, task_string, "dataset.json"), cropped_out_dir)

@@ -120,7 +120,11 @@ def get_patient_identifiers_from_cropped_files(folder):
     return [i.split("/")[-1][:-4] for i in subfiles(folder, join=True, suffix=".npz")]
 
 
-class ImageCropper(object):
+class ImageCropper_2(object):
+    """
+    write my crop code
+    :for unlabeled data
+    """
     def __init__(self, num_threads, output_folder=None):
         """
         This one finds a mask of nonzero elements (must be nonzero in all modalities) and crops the image to that mask.
@@ -152,7 +156,7 @@ class ImageCropper(object):
     @staticmethod
     def crop_from_list_of_files(data_files, seg_file=None):
         data, seg, properties = load_case_from_list_of_files(data_files, seg_file)
-        return ImageCropper.crop(data, properties, seg)
+        return ImageCropper_2.crop(data, properties, seg)
 
     def load_crop_save(self, case, case_identifier, overwrite_existing=False):
         try:
