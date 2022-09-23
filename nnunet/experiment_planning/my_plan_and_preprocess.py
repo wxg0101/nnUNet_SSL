@@ -23,7 +23,7 @@ from nnunet.utilities.task_name_id_conversion import convert_id_to_task_name
 from nnunet.preprocessing.sanity_checks import verify_dataset_integrity
 from nnunet.training.model_restore import recursive_find_python_class
 from nnunet.preprocessing.cropping import ImageCropper
-from nnunet.preprocessing.my_cropping import ImageCropper_2
+from nnunet.preprocessing.my_croppingV2 import ImageCropper_2
 from nnunet.configuration import default_num_threads
 from multiprocessing import Pool
 

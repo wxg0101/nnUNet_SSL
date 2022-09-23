@@ -81,7 +81,7 @@ def load_case_from_list_of_files(data_files, seg_file=None):
     return data_npy.astype(np.float32), seg_npy, properties
 
 
-def crop_to_nonzero(data, nonzero_label=-1):
+def crop_to_nonzero(data, seg=None, nonzero_label=-1):
     """
 
     :param data:
@@ -97,8 +97,23 @@ def crop_to_nonzero(data, nonzero_label=-1):
         cropped = crop_to_bbox(data[c], bbox)
         cropped_data.append(cropped[None])
     data = np.vstack(cropped_data)
-    
-    return data, bbox
+
+    if seg is not None:
+        cropped_seg = []
+        for c in range(seg.shape[0]):
+            cropped = crop_to_bbox(seg[c], bbox)
+            cropped_seg.append(cropped[None])
+        seg = np.vstack(cropped_seg)
+
+    nonzero_mask = crop_to_bbox(nonzero_mask, bbox)[None]
+    if seg is not None:
+        seg[(seg == 0) & (nonzero_mask == 0)] = nonzero_label
+    else:
+        nonzero_mask = nonzero_mask.astype(int)
+        nonzero_mask[nonzero_mask == 0] = nonzero_label
+        nonzero_mask[nonzero_mask > 0] = 0
+        seg = nonzero_mask
+    return data, seg, bbox
 
 
 def get_patient_identifiers_from_cropped_files(folder):
@@ -106,10 +121,6 @@ def get_patient_identifiers_from_cropped_files(folder):
 
 
 class ImageCropper_2(object):
-    """
-    write my crop code
-    :for unlabeled data
-    """
     def __init__(self, num_threads, output_folder=None):
         """
         This one finds a mask of nonzero elements (must be nonzero in all modalities) and crops the image to that mask.
@@ -127,7 +138,7 @@ class ImageCropper_2(object):
     @staticmethod
     def crop(data, properties, seg=None):
         shape_before = data.shape
-        data, bbox = crop_to_nonzero(data)
+        data, seg, bbox = crop_to_nonzero(data, seg, nonzero_label=-1)
         shape_after = data.shape
         print("before crop:", shape_before, "after crop:", shape_after, "spacing:",
               np.array(properties["original_spacing"]), "\n")
@@ -136,7 +147,7 @@ class ImageCropper_2(object):
         properties['classes'] = np.unique(seg)
         seg[seg < -1] = 0
         properties["size_after_cropping"] = data[0].shape
-        return data, properties
+        return data, seg, properties
 
     @staticmethod
     def crop_from_list_of_files(data_files, seg_file=None):
@@ -150,7 +161,7 @@ class ImageCropper_2(object):
                     or (not os.path.isfile(os.path.join(self.output_folder, "%s.npz" % case_identifier))
                         or not os.path.isfile(os.path.join(self.output_folder, "%s.pkl" % case_identifier))):
 
-                data, seg, properties = self.crop_from_list_of_files(case[:-1],seg_file= None)
+                data, seg, properties = self.crop_from_list_of_files(case[:-1], case[-1])
 
                 all_data = np.vstack((data, seg))
                 np.savez_compressed(os.path.join(self.output_folder, "%s.npz" % case_identifier), data=all_data)
