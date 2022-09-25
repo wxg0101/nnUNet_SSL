@@ -120,8 +120,9 @@ def main():
             for mod in range(num_modalities):
                 cur_pat.append(join(base_folder_splitted, "imagesTr", tr['image'].split("/")[-1][:-7] +
                                     "_%04.0d.nii.gz" % mod))
-            cur_pat.append(join(base_folder_splitted, "labelsTr", tr['label'].split("/")[-1]))
+            cur_pat.append(None)    ### no GT
             lists.append(cur_pat)
+            ########cur_pat list -> [train_pth,..., label_pth]#################
         return lists, {int(i): d['modality'][str(i)] for i in d['modality'].keys()}
     
     def crop(task_string, override=False, num_threads=default_num_threads):

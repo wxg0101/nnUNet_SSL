@@ -37,7 +37,7 @@ from torch.cuda.amp import autocast
 from nnunet.training.learning_rate.poly_lr import poly_lr
 from batchgenerators.utilities.file_and_folder_operations import *
 from nnunet.training.dataloading.dataset_loading import load_dataset, DataLoader3D, DataLoader2D, unpack_dataset
-
+from nnunet.training.data_augmentation.data_augmentation_noDA import get_no_augmentation
 
 class nnUNetTrainerV2_SSL(nnUNetTrainer):
     """
@@ -92,7 +92,8 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
             self.loss = MultipleOutputLoss2(self.loss, self.ds_loss_weights)
             ################# END ###################
             ################# LOAD DATA#################
-            self.dataset_directory_2 = '/media/oem/sda21/wxg/codebase/dataset/nnUNet_preprocessed/Task521_LUNGSeg'
+            #################load unlabeled data#################
+            self.dataset_directory_2 = '/media/oem/sda21/wxg/codebase/dataset/nnUNet_preprocessed/Task301_SSLSeg_unlab'
             self.folder_with_preprocessed_data = join(self.dataset_directory, self.plans['data_identifier'] +
                                                       "_stage%d" % self.stage)
             self.folder_with_preprocessed_data_2 = join(self.dataset_directory_2, self.plans['data_identifier'] +
@@ -100,9 +101,11 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
             if training:
                 self.dl_tr, self.dl_val = self.get_basic_generators()
                 self.dl_tr_2,self.dl_val_2=self.get_basic_generators_2()
+                self.dl_tr_3,self.dl_val_3=self.dl_tr_2,self.dl_val_2
                 if self.unpack_data:
                     print("unpacking dataset")
                     unpack_dataset(self.folder_with_preprocessed_data)
+                    unpack_dataset(self.folder_with_preprocessed_data_2)
                     print("done")
                 else:
                     print(
@@ -126,6 +129,11 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                     deep_supervision_scales=self.deep_supervision_scales,
                     pin_memory=self.pin_memory,
                     use_nondetMultiThreadedAugmenter=False
+                )
+                self.tr_gen_3, self.val_gen_3 = get_no_augmentation(
+                    self.dl_tr_3, self.dl_val_3,self.data_aug_params,
+                    deep_supervision_scales=self.deep_supervision_scales,
+                    pin_memory=self.pin_memory
                 )
                 self.print_to_log_file("TRAINING KEYS:\n %s" % (str(self.dataset_tr.keys())),
                                        also_print_to_console=False)
@@ -265,7 +273,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
         self.network.do_ds = ds
         return ret
   
-    def run_iteration(self, data_generator, data_generator_2,do_backprop=True, run_online_evaluation=False,iter_num=0):
+    def run_iteration(self, data_generator, data_generator_2,data_generator_3,do_backprop=True, run_online_evaluation=False,iter_num=0):
         """
         gradient clipping improves training stability
 
@@ -289,25 +297,31 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                     phase = 1.0 - current / rampup_length
                     return float(np.exp(-5.0 * phase * phase))
             # Consistency ramp-up from https://arxiv.org/abs/1610.02242
-            return 0.1 * sigmoid_rampup(epoch, 200.0)
+            return 0.1 * sigmoid_rampup(epoch, 100.0)
         data_dict = next(data_generator)
         data_dict_2 = next(data_generator_2)
+        # data_dict_3 = next(data_generator_3)
+        # TypeError: 'bool' object is not an iterator
         data = data_dict['data']
         target = data_dict['target']
-        unlabeled = data_dict_2['data']#TODO:增加无标签数据的读取
+        unlabeled = data_dict_2['data']#TODO:增加无标签数据的读取√
+        # ema_inputs = data_dict_3['data']
 
         data = maybe_to_torch(data)
         target = maybe_to_torch(target)
         unlabeled = maybe_to_torch(unlabeled)
-        noise = torch.clamp(torch.randn_like(
-                unlabeled) * 0.1, -0.2, 0.2)
-        ema_inputs = unlabeled + noise
-
+        # noise = torch.clamp(torch.randn_like(
+        #         unlabeled) * 0.1, -0.2, 0.2)
+        # ema_inputs = unlabeled + noise
+        ema_inputs = unlabeled
         if torch.cuda.is_available():
             data = to_cuda(data)
             target = to_cuda(target)
             unlabeled = to_cuda(unlabeled)
             ema_inputs = to_cuda(ema_inputs)
+            ######有bug，待解决,RuntimeError: 
+            # Sizes of tensors must match except in dimension 1. 
+            # Expected size 96 but got size 95 for tensor number 1 in the list.
 
 
         self.optimizer.zero_grad()
@@ -321,8 +335,8 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                     ema_output = self.ema_model(ema_inputs)
                     del ema_inputs
                 supervised_loss = 0.5*l
-                consistency_weight = get_current_consistency_weight(iter_num//150)
-                if iter_num < 1000:
+                consistency_weight = get_current_consistency_weight(iter_num//100)
+                if iter_num < 500:
                     consistency_loss = 0.0
                 else:
                     output_unlabel = self.network(unlabeled)
@@ -553,6 +567,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
         _ = self.tr_gen.next()
         _ = self.val_gen.next()
         _ = self.tr_gen_2.next()
+        _ = self.tr_gen_3.next()
 
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
@@ -590,7 +605,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
             else:
                 for _ in range(self.num_batches_per_epoch):
 
-                    l = self.run_iteration(self.tr_gen,self.tr_gen_2, True,iter_num=iter_num)
+                    l = self.run_iteration(self.tr_gen,self.tr_gen_2, self.tr_gen_3,True,iter_num=iter_num)
                     iter_num=iter_num+1
                     train_losses_epoch.append(l)
 
@@ -602,7 +617,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                 self.network.eval()
                 val_losses = []
                 for b in range(self.num_val_batches_per_epoch):
-                    l = self.run_iteration(self.val_gen,self.val_gen_2, False, True)
+                    l = self.run_iteration(self.val_gen,self.val_gen_2, self.val_gen_3,False, True)
                     val_losses.append(l)
                 self.all_val_losses.append(np.mean(val_losses))
                 self.print_to_log_file("validation loss: %.4f" % self.all_val_losses[-1])

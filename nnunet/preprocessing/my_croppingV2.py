@@ -138,7 +138,7 @@ class ImageCropper_2(object):
     @staticmethod
     def crop(data, properties, seg=None):
         shape_before = data.shape
-        data, seg, bbox = crop_to_nonzero(data, seg, nonzero_label=-1)
+        data, seg, bbox = crop_to_nonzero(data, seg=None, nonzero_label=-1)
         shape_after = data.shape
         print("before crop:", shape_before, "after crop:", shape_after, "spacing:",
               np.array(properties["original_spacing"]), "\n")
@@ -151,8 +151,8 @@ class ImageCropper_2(object):
 
     @staticmethod
     def crop_from_list_of_files(data_files, seg_file=None):
-        data, seg, properties = load_case_from_list_of_files(data_files, seg_file)
-        return ImageCropper_2.crop(data, properties, seg)
+        data, seg, properties = load_case_from_list_of_files(data_files, seg_file=None)
+        return ImageCropper_2.crop(data, properties,seg = None)
 
     def load_crop_save(self, case, case_identifier, overwrite_existing=False):
         try:
@@ -161,7 +161,7 @@ class ImageCropper_2(object):
                     or (not os.path.isfile(os.path.join(self.output_folder, "%s.npz" % case_identifier))
                         or not os.path.isfile(os.path.join(self.output_folder, "%s.pkl" % case_identifier))):
 
-                data, seg, properties = self.crop_from_list_of_files(case[:-1], case[-1])
+                data, seg, properties = self.crop_from_list_of_files(case[:-1], seg_file=None)
 
                 all_data = np.vstack((data, seg))
                 np.savez_compressed(os.path.join(self.output_folder, "%s.npz" % case_identifier), data=all_data)
