@@ -48,7 +48,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                  unpack_data=True, deterministic=True, fp16=False):
         super().__init__(plans_file, fold, output_folder, dataset_directory, batch_dice, stage, unpack_data,
                          deterministic, fp16)
-        self.max_num_epochs = 1000
+        self.max_num_epochs = 300 #调整epoch
         self.initial_lr = 1e-2
         self.deep_supervision_scales = None
         self.ds_loss_weights = None
@@ -310,10 +310,9 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
         data = maybe_to_torch(data)
         target = maybe_to_torch(target)
         unlabeled = maybe_to_torch(unlabeled)
-        # noise = torch.clamp(torch.randn_like(
-        #         unlabeled) * 0.1, -0.2, 0.2)
-        # ema_inputs = unlabeled + noise
-        ema_inputs = unlabeled
+        noise = torch.clamp(torch.randn_like(
+                unlabeled) * 0.1, -0.2, 0.2)
+        ema_inputs = unlabeled + noise
         if torch.cuda.is_available():
             data = to_cuda(data)
             target = to_cuda(target)
@@ -335,7 +334,8 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                     ema_output = self.ema_model(ema_inputs)
                     del ema_inputs
                 supervised_loss = 0.5*l
-                consistency_weight = get_current_consistency_weight(iter_num//100)
+                consistency_weight = get_current_consistency_weight(iter_num//250)
+
                 if iter_num < 500:
                     consistency_loss = 0.0
                 else:
@@ -343,7 +343,10 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                     consistency_loss = torch.mean(
                         (output_unlabel[0] - ema_output[0])**2
                     )
+                # self.print_to_log_file("consistency_weight:{%.4f}"%consistency_weight)
+                # self.print_to_log_file("consistency_loss:{}"%consistency_loss)
                 loss = supervised_loss + consistency_weight*consistency_loss
+                unsupervised_loss = consistency_weight*consistency_loss
 
             if do_backprop:
                 self.amp_grad_scaler.scale(loss).backward()
@@ -353,6 +356,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                 self.amp_grad_scaler.update()
                 update_ema_variables(self.network, self.ema_model, 0.99, iter_num)
         else:
+            print("fp16 is not used")
             output = self.network(data)
             del data
             l = self.loss(output, target)
@@ -380,8 +384,10 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
             self.run_online_evaluation(output, target)
 
         del target
-
-        return loss.detach().cpu().numpy()
+        if unsupervised_loss == 0.0:
+            return loss.detach().cpu().numpy(),unsupervised_loss,supervised_loss.detach().cpu().numpy()
+        else:
+            return loss.detach().cpu().numpy(),unsupervised_loss.detach().cpu().numpy(),supervised_loss.detach().cpu().numpy()
     def load_dataset_2(self):
         self.dataset_2 = load_dataset(self.folder_with_preprocessed_data_2)
     def do_split(self):
@@ -589,11 +595,13 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
             self.print_to_log_file("\nepoch: ", self.epoch)
             epoch_start_time = time()
             train_losses_epoch = []
+            train_unlabeled_losses_epoch = []
+            train_super_losses_epoch = []
 
             # train one epoch
             self.network.train()
 
-            if self.use_progress_bar:
+            if self.use_progress_bar:#####defautl is False###########
                 with trange(self.num_batches_per_epoch) as tbar:
                     for b in tbar:
                         tbar.set_description("Epoch {}/{}".format(self.epoch+1, self.max_num_epochs))
@@ -603,14 +611,20 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                         tbar.set_postfix(loss=l)
                         train_losses_epoch.append(l)
             else:
+                # print("num_batches_per_epoch: ->",self.num_batches_per_epoch)
                 for _ in range(self.num_batches_per_epoch):
+                    # print('batch: -> ', _ )
 
-                    l = self.run_iteration(self.tr_gen,self.tr_gen_2, self.tr_gen_3,True,iter_num=iter_num)
+                    l ,unsupl, supl= self.run_iteration(self.tr_gen,self.tr_gen_2, self.tr_gen_3,True,iter_num=iter_num)
                     iter_num=iter_num+1
                     train_losses_epoch.append(l)
-
+                    train_unlabeled_losses_epoch.append(unsupl)
+                    train_super_losses_epoch.append(supl)
+                    
+            self.print_to_log_file('unlabeld loss: %.8f'%np.mean(train_unlabeled_losses_epoch))
             self.all_tr_losses.append(np.mean(train_losses_epoch))
             self.print_to_log_file("train loss : %.4f" % self.all_tr_losses[-1])
+            self.print_to_log_file('iter_num: %05f' % iter_num)
 
             with torch.no_grad():
                 # validation with train=False
