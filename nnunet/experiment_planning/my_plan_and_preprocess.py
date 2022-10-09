@@ -41,7 +41,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("-t", "--task_ids", nargs="+", default= [301],help="List of integers belonging to the task ids you wish to run"
+    parser.add_argument("-t", "--task_ids", nargs="+", default= [307],help="List of integers belonging to the task ids you wish to run"
                                                             " experiment planning and preprocessing for. Each of these "
                                                             "ids must, have a matching folder 'TaskXXX_' in the raw "
                                                             "data folder")
@@ -232,8 +232,8 @@ def main():
         # check for stragglers
         assert len(
             nii_files_in_imagesTr) == 0, "there are training cases in imagesTr that are not listed in dataset.json: %s" % nii_files_in_imagesTr
-        assert len(
-            nii_files_in_labelsTr) == 0, "there are training cases in labelsTr that are not listed in dataset.json: %s" % nii_files_in_labelsTr
+        # assert len(
+        #     nii_files_in_labelsTr) == 0, "there are training cases in labelsTr that are not listed in dataset.json: %s" % nii_files_in_labelsTr
 
         # verify that only properly declared values are present in the labels
         print("Verifying label values---SKIP")

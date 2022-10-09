@@ -3,7 +3,7 @@ from batchgenerators.utilities.file_and_folder_operations import *
 from nnunet.dataset_conversion.utils import generate_dataset_json
 from nnunet.paths import nnUNet_raw_data, preprocessing_output_dir
 from nnunet.utilities.file_conversions import convert_2d_image_to_nifti
-import random
+
 if __name__ == '__main__':
     """
     nnU-Net was originally built for 3D images. It is also strongest when applied to 3D segmentation problems because a 
@@ -25,11 +25,11 @@ if __name__ == '__main__':
 
     # download dataset from https://www.kaggle.com/insaff/massachusetts-roads-dataset
     # extract the zip file, then set the following path according to your system:
-    base = '/media/oem/sda21/wxg/NeurIPS-CellSeg-main/data/labeled'
+    base = '/media/fabian/data/road_segmentation_ideal'
     # this folder should have the training and testing subfolders
 
     # now start the conversion to nnU-Net:
-    task_name = 'Task305_SSLSegRandom25'
+    task_name = 'Task308_TCIA30'
     target_base = join(nnUNet_raw_data, task_name)
     target_imagesTr = join(target_base, "imagesTr")
     target_imagesTs = join(target_base, "imagesTs")
@@ -43,15 +43,13 @@ if __name__ == '__main__':
 
     # convert the training examples. Not all training images have labels, so we just take the cases for which there are
     # labels
-    labels_dir_tr = join(base, 'output')
-    images_dir_tr = join(base, 'input')
-    training_cases = subfiles(labels_dir_tr, suffix='.png', join=False)
-    training_cases = random.sample(training_cases, 25)
+    labels_dir_tr = '/media/oem/sda21/wxg/NeurIPS-CellSeg-main/data/TCIA/stomach/stad/mask'
+    images_dir_tr = '/media/oem/sda21/wxg/NeurIPS-CellSeg-main/data/TCIA/stomach/stad/image'
+    training_cases = subfiles(labels_dir_tr, suffix='.png', join=False)[:30]
     for t in training_cases:
-        print(t)
         unique_name = t[:-4]  # just the filename with the extension cropped away, so img-2.png becomes img-2 as unique_name
         input_segmentation_file = join(labels_dir_tr, t)
-        input_image_file = join(images_dir_tr, t.replace('_label',''))
+        input_image_file = join(images_dir_tr, t)
 
         output_image_file = join(target_imagesTr, unique_name)  # do not specify a file ending! This will be done for you
         output_seg_file = join(target_labelsTr, unique_name)  # do not specify a file ending! This will be done for you
@@ -60,9 +58,10 @@ if __name__ == '__main__':
         # if this throws an error for your images, please just look at the code for this function and adapt it to your needs
         convert_2d_image_to_nifti(input_image_file, output_image_file, is_seg=False)
 
-        # the labels are stored as 0: background, 255: road. We need to convert the 2 to 1 because nnU-Net expects
+        # the labels are stored as 0: background, 255: road. We need to convert the 255 to 1 because nnU-Net expects
         # the labels to be consecutive integers. This can be achieved with setting a transform
-        convert_2d_image_to_nifti(input_segmentation_file, output_seg_file, is_seg=True)
+        convert_2d_image_to_nifti(input_segmentation_file, output_seg_file, is_seg=True,
+        transform=lambda x: (x == 255).astype(int))
 
     # now do the same for the test set
 
@@ -83,7 +82,7 @@ if __name__ == '__main__':
 
     # finally we can call the utility for generating a dataset.json
     generate_dataset_json(join(target_base, 'dataset.json'), target_imagesTr, target_imagesTs, ('Red', 'Green', 'Blue'),
-                          labels={0: 'background', 1: 'cell', 2:'boundary'}, dataset_name=task_name, license='hands off!')
+                          labels={0: 'background', 1: 'street'}, dataset_name=task_name, license='hands off!')
 
     """
     once this is completed, you can use the dataset like any other nnU-Net dataset. Note that since this is a 2D

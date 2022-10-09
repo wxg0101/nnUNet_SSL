@@ -41,7 +41,8 @@ from nnunet.training.data_augmentation.data_augmentation_noDA import get_no_augm
 
 class nnUNetTrainerV2_SSL(nnUNetTrainer):
     """
-    Info for Fabian: same as internal nnUNetTrainerV2_2
+    - YOU MUST ADD dataset_directory_2 to fit your own data!!!
+    - dataset_directory_2 = you preprocessed data path
     """
 
     def __init__(self, plans_file, fold, output_folder=None, dataset_directory=None, batch_dice=True, stage=None,
@@ -93,7 +94,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
             ################# END ###################
             ################# LOAD DATA#################
             #################load unlabeled data#################
-            self.dataset_directory_2 = '/media/oem/sda21/wxg/codebase/dataset/nnUNet_preprocessed/Task301_SSLSeg_unlab'
+            self.dataset_directory_2 = '/media/oem/sda21/wxg/codebase/dataset/nnUNet_preprocessed/Task307_OpenSetTCIAunlab'
             self.folder_with_preprocessed_data = join(self.dataset_directory, self.plans['data_identifier'] +
                                                       "_stage%d" % self.stage)
             self.folder_with_preprocessed_data_2 = join(self.dataset_directory_2, self.plans['data_identifier'] +
@@ -164,7 +165,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
             dl_tr = DataLoader2D(self.dataset_tr_2, self.basic_generator_patch_size, self.patch_size, self.batch_size,
                                  oversample_foreground_percent=self.oversample_foreground_percent,
                                  pad_mode="constant", pad_sides=self.pad_all_sides, memmap_mode='r')
-            dl_val = DataLoader2D(self.dataset_val_2, self.patch_size, self.patch_size, self.batch_size,
+            dl_val = DataLoader2D(self.dataset_val_2, self.patch_size, self.patch_size, self.batch_size+2,
                                   oversample_foreground_percent=self.oversample_foreground_percent,
                                   pad_mode="constant", pad_sides=self.pad_all_sides, memmap_mode='r')
         return dl_tr, dl_val
@@ -297,7 +298,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                     phase = 1.0 - current / rampup_length
                     return float(np.exp(-5.0 * phase * phase))
             # Consistency ramp-up from https://arxiv.org/abs/1610.02242
-            return 0.1 * sigmoid_rampup(epoch, 100.0)
+            return 2 * sigmoid_rampup(epoch, 40)
         data_dict = next(data_generator)
         data_dict_2 = next(data_generator_2)
         # data_dict_3 = next(data_generator_3)
@@ -305,14 +306,15 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
         data = data_dict['data']
         target = data_dict['target']
         unlabeled = data_dict_2['data']#TODO:增加无标签数据的读取√
+        
         # ema_inputs = data_dict_3['data']
 
         data = maybe_to_torch(data)
         target = maybe_to_torch(target)
         unlabeled = maybe_to_torch(unlabeled)
         noise = torch.clamp(torch.randn_like(
-                unlabeled) * 0.1, -0.2, 0.2)
-        ema_inputs = unlabeled + noise
+                unlabeled) * 0.1, -0.1, 0.2)
+        ema_inputs = unlabeled ######+ noise
         if torch.cuda.is_available():
             data = to_cuda(data)
             target = to_cuda(target)
@@ -333,8 +335,8 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                 with torch.no_grad():
                     ema_output = self.ema_model(ema_inputs)
                     del ema_inputs
-                supervised_loss = 0.5*l
-                consistency_weight = get_current_consistency_weight(iter_num//250)
+                supervised_loss = l ###0.5需要么？
+                consistency_weight = get_current_consistency_weight(iter_num//50)
 
                 if iter_num < 500:
                     consistency_loss = 0.0
@@ -357,37 +359,16 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                 update_ema_variables(self.network, self.ema_model, 0.99, iter_num)
         else:
             print("fp16 is not used")
-            output = self.network(data)
-            del data
-            l = self.loss(output, target)
-            with torch.no_grad():
-                ema_output = self.ema_model(ema_inputs)
-                del ema_inputs
-            supervised_loss = 0.5*l
-            consistency_weight = get_current_consistency_weight(iter_num//150)
-            if iter_num < 1000:
-                consistency_loss = 0.0
-            else:
-                output_unlabel = self.network(unlabeled)
-                consistency_loss = torch.mean(
-                    (output_unlabel - ema_output)**2
-                )
-            loss = supervised_loss + consistency_weight*consistency_loss
 
-            if do_backprop:
-                loss.backward()
-                torch.nn.utils.clip_grad_norm_(self.network.parameters(), 12)
-                self.optimizer.step()
-                update_ema_variables(self.network, self.ema_model, 0.99, iter_num)
 
         if run_online_evaluation:
             self.run_online_evaluation(output, target)
 
         del target
         if unsupervised_loss == 0.0:
-            return loss.detach().cpu().numpy(),unsupervised_loss,supervised_loss.detach().cpu().numpy()
+            return loss.detach().cpu().numpy(),unsupervised_loss,supervised_loss.detach().cpu().numpy(),consistency_weight
         else:
-            return loss.detach().cpu().numpy(),unsupervised_loss.detach().cpu().numpy(),supervised_loss.detach().cpu().numpy()
+            return loss.detach().cpu().numpy(),unsupervised_loss.detach().cpu().numpy(),supervised_loss.detach().cpu().numpy(),consistency_weight
     def load_dataset_2(self):
         self.dataset_2 = load_dataset(self.folder_with_preprocessed_data_2)
     def do_split(self):
@@ -615,16 +596,17 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                 for _ in range(self.num_batches_per_epoch):
                     # print('batch: -> ', _ )
 
-                    l ,unsupl, supl= self.run_iteration(self.tr_gen,self.tr_gen_2, self.tr_gen_3,True,iter_num=iter_num)
+                    l ,unsupl, supl,consistance_weight= self.run_iteration(self.tr_gen,self.tr_gen_2, self.tr_gen_3,True,iter_num=iter_num)
                     iter_num=iter_num+1
                     train_losses_epoch.append(l)
                     train_unlabeled_losses_epoch.append(unsupl)
                     train_super_losses_epoch.append(supl)
-                    
+            self.print_to_log_file('consistance_weight: %.8f'%consistance_weight)
             self.print_to_log_file('unlabeld loss: %.8f'%np.mean(train_unlabeled_losses_epoch))
+            self.print_to_log_file('super loss: %.8f'%np.mean(train_super_losses_epoch))
             self.all_tr_losses.append(np.mean(train_losses_epoch))
             self.print_to_log_file("train loss : %.4f" % self.all_tr_losses[-1])
-            self.print_to_log_file('iter_num: %05f' % iter_num)
+            self.print_to_log_file('iter_num: %d' % iter_num)
 
             with torch.no_grad():
                 # validation with train=False
@@ -635,7 +617,6 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                     val_losses.append(l)
                 self.all_val_losses.append(np.mean(val_losses))
                 self.print_to_log_file("validation loss: %.4f" % self.all_val_losses[-1])
-
                 if self.also_val_in_tr_mode:
                     self.network.train()
                     # validation with train=True
