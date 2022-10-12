@@ -94,7 +94,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
             ################# END ###################
             ################# LOAD DATA#################
             #################load unlabeled data#################
-            self.dataset_directory_2 = '/media/oem/sda21/wxg/codebase/dataset/nnUNet_preprocessed/Task307_OpenSetTCIAunlab'
+            self.dataset_directory_2 = '/media/oem/sda21/wxg/codebase/dataset/nnUNet_preprocessed/Task301_SSLSeg_unlab'
             self.folder_with_preprocessed_data = join(self.dataset_directory, self.plans['data_identifier'] +
                                                       "_stage%d" % self.stage)
             self.folder_with_preprocessed_data_2 = join(self.dataset_directory_2, self.plans['data_identifier'] +
@@ -298,7 +298,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                     phase = 1.0 - current / rampup_length
                     return float(np.exp(-5.0 * phase * phase))
             # Consistency ramp-up from https://arxiv.org/abs/1610.02242
-            return 2 * sigmoid_rampup(epoch, 40)
+            return 3 * sigmoid_rampup(epoch, 40)
         data_dict = next(data_generator)
         data_dict_2 = next(data_generator_2)
         # data_dict_3 = next(data_generator_3)
@@ -314,7 +314,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
         unlabeled = maybe_to_torch(unlabeled)
         noise = torch.clamp(torch.randn_like(
                 unlabeled) * 0.1, -0.1, 0.2)
-        ema_inputs = unlabeled ######+ noise
+        ema_inputs = unlabeled.rot90(k=1,dims=[2,3]) ######+ noise
         if torch.cuda.is_available():
             data = to_cuda(data)
             target = to_cuda(target)
@@ -343,7 +343,7 @@ class nnUNetTrainerV2_SSL(nnUNetTrainer):
                 else:
                     output_unlabel = self.network(unlabeled)
                     consistency_loss = torch.mean(
-                        (output_unlabel[0] - ema_output[0])**2
+                        (output_unlabel[0] - ema_output[0].rot90(k=-1,dims=[2,3]))**2
                     )
                 # self.print_to_log_file("consistency_weight:{%.4f}"%consistency_weight)
                 # self.print_to_log_file("consistency_loss:{}"%consistency_loss)
