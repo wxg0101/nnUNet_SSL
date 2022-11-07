@@ -3,6 +3,7 @@ from skimage import io
 import SimpleITK as sitk
 import numpy as np
 import tifffile
+import cv2
 
 
 def convert_2d_image_to_nifti(input_filename: str, output_filename_truncated: str, spacing=(999, 1, 1),
@@ -29,8 +30,10 @@ def convert_2d_image_to_nifti(input_filename: str, output_filename_truncated: st
     :param spacing:
     :return:
     """
-    img = io.imread(input_filename)
-
+    if is_seg:
+        img = io.imread(input_filename)
+    else:
+        img = cv2.imread(input_filename)
     if transform is not None:
         img = transform(img)
 

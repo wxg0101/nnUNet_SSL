@@ -19,6 +19,7 @@ import json
 import hashlib
 from datetime import datetime
 from multiprocessing.pool import Pool
+from unicodedata import name
 import numpy as np
 import pandas as pd
 import SimpleITK as sitk
@@ -481,3 +482,6 @@ def nnunet_evaluate_folder():
                                                                        "information.")
     args = parser.parse_args()
     return evaluate_folder(args.ref, args.pred, args.l)
+
+if __name__ == "__main__":
+    nnunet_evaluate_folder()
